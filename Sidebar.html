@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <base target="_top">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+      :root { --primary-color: #4a86e8; --secondary-color: #666; --border-color: #ddd; --kanban-bg: #e9ecef; --card-bg: #fff; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; position: relative; min-height: 100vh; }
+      .container { padding: 15px; }
+      .header { display: flex; justify-content: space-between; align-items: center; }
+      .header-actions { display: flex; align-items: center; }
+      h3 { margin-top: 0; margin-bottom: 1rem; }
+      p { font-size: 13px; color: #666; margin-top: 0; }
+      button { padding: 8px 12px; border: none; border-radius: 4px; color: white; cursor: pointer; font-weight: bold; transition: background-color 0.1s ease, color 0.1s ease; }
+      button:disabled, input:disabled { background-color: #ccc !important; cursor: not-allowed; opacity: 0.6; }
+      .button-primary { background-color: var(--primary-color); }
+      .button-secondary { background-color: var(--secondary-color); }
+      .tabs { display: flex; border-bottom: 2px solid var(--border-color); }
+      .tab-link { padding: 10px 15px; cursor: pointer; background: none; border: none; font-weight: bold; color: #888; border-bottom: 3px solid transparent; flex-grow: 1; text-align: center; }
+      .tab-link.active { color: var(--primary-color); border-bottom-color: var(--primary-color); }
+      .tab-content { display: none; padding-top: 15px; }
+      .tab-content.active { display: block; }
+      .section { margin-bottom: 20px; }
+      .section-title { font-weight: bold; margin-bottom: 10px; font-size: 14px; }
+      .settings-btn { background: none; border: none; cursor: pointer; color: #888; padding: 0 5px; display: flex; align-items: center; }
+      .settings-btn:hover { color: #333; }
+      .kanban-column { background-color: #f1f2f4; border-radius: 5px; padding: 8px; min-width: 150px; flex-shrink: 0; }
+      .kanban-column-title { font-weight: bold; padding: 5px; margin-bottom: 10px; font-size: 12px; }
+      .kanban-cards { list-style-type: none; padding: 0; min-height: 50px; }
+      .kanban-card { background-color: var(--card-bg); padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; margin-bottom: 8px; cursor: grab; font-size: 12px; }
+      .kanban-card strong { color: var(--primary-color); margin-right: 5px; }
+      .loader-container { text-align: center; padding: 20px; }
+      .loader { border: 4px solid #f3f3f3; border-radius: 50%; border-top: 4px solid var(--primary-color); width: 24px; height: 24px; animation: spin 1s linear infinite; margin: 0 auto; }
+      @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+      .view-mode-option { display: flex; align-items: center; margin-bottom: 8px; }
+      .view-mode-option input[type="radio"] { margin-right: 8px; }
+
+      /* Goal Styles */
+      .goal-input-group { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 13px; }
+      .goal-input-group input { border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 6px; }
+      .progress-display { margin-top: 10px; }
+      .progress-text { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; margin-bottom: 5px; }
+      .progress-subtext { font-size: 11px; color: #888; }
+      progress { width: 100%; -webkit-appearance: none; appearance: none; height: 8px; border-radius: 5px; overflow: hidden; border: none; }
+      progress::-webkit-progress-bar { background-color: #eee; }
+      progress::-webkit-progress-value { background-color: var(--primary-color); }
+      
+      /* Alert Styles */
+      .goal-alert { padding: 10px 15px; margin-bottom: 15px; border-radius: 4px; font-size: 13px; border: 1px solid transparent; display: flex; align-items: center; gap: 10px; }
+      .goal-alert .material-icons { font-size: 20px; }
+      .alert-warning { background-color: #fffbe6; border-color: #ffe58f; color: #6d5d2b; }
+      .alert-danger { background-color: #f8d7da; border-color: #f5c6cb; color: #721c24; }
+
+      /* Milestone Styles */
+      .milestone-add-form { display: flex; gap: 5px; margin-bottom: 15px; }
+      .milestone-add-form input[type="text"] { flex-grow: 1; border: 1px solid var(--border-color); border-radius: 4px; padding: 6px; }
+      .milestone-add-form input[type="date"] { border: 1px solid var(--border-color); border-radius: 4px; padding: 4px; }
+      .milestone-add-form button { padding: 0; width: 32px; height: 32px; font-size: 20px; line-height: 32px; flex-shrink: 0; }
+      #milestones-list { list-style: none; padding: 0; margin: 0; }
+      .milestone-item { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 8px 0; border-bottom: 1px solid #eee; }
+      .milestone-item:last-child { border-bottom: none; }
+      .milestone-item input[type="checkbox"] { width: 16px; height: 16px; margin-top: 2px; flex-shrink: 0; }
+      .milestone-item .milestone-details { flex-grow: 1; }
+      .milestone-item .milestone-due-date { font-size: 11px; color: #888; }
+      .milestone-item.completed .milestone-details { text-decoration: line-through; color: #888; }
+      .delete-milestone-btn { background: none; border: none; color: #aaa; cursor: pointer; padding: 2px; }
+      .delete-milestone-btn .material-icons { font-size: 18px; }
+      .delete-milestone-btn:hover { color: #d93025; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h3>Content Dashboard</h3>
+            <div class="header-actions">
+                <button class="settings-btn" onclick="reloadSidebar()" title="Refresh Sidebar">
+                    <span class="material-icons">refresh</span>
+                </button>
+                <button class="settings-btn" onclick="openSettings()" title="Settings">
+                    <span class="material-icons">settings</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- GOAL NOTIFICATION AREA -->
+        <div id="goal-alerts-container"></div>
+
+        <div class="tabs" id="tabs-container"></div>
+        <div id="tab-content-container"></div>
+    </div>
+
+    <div id="loader-container" style="display: none;"><div class="loader"></div></div>
+
+    <!-- Templates for each tab's content -->
+    <template id="architectTab-template">
+        <p>A compact view for quick reordering. Use the fullscreen button for more space.</p>
+        <div style="display: flex; gap: 8px; margin-bottom: 15px;">
+            <button id="scanBtn" class="button-secondary" style="flex-grow: 1;">Rescan</button>
+            <button class="button-primary" onclick="openDialog()" style="flex-grow: 1;">Open Fullscreen</button>
+        </div>
+        <div id="kanban-board" style="display: flex; gap: 10px; overflow-x: auto; padding: 5px; background-color: var(--kanban-bg); border-radius: 5px; min-height: 150px;"></div>
+        <button class="button-primary rebuild-btn" style="width: 100%; margin-top: 15px;" disabled>Rebuild Document</button>
+    </template>
+    
+    <!-- ======================= TAGGER TAB (MODIFIED) ======================= -->
+    <template id="taggerTab-template">
+        <div class="section">
+            <div class="section-title">Smart Tagger</div>
+            <p>Highlight paragraph(s), then click to apply a tag.</p>
+            <div id="tagger-buttons" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+        </div>
+        <div class="section">
+            <div class="section-title">Manage Tags</div>
+            <p>Open the library to create, edit, or delete your custom tags.</p>
+            <button class="button-primary" style="width: 100%;" onclick="openTagManager()">Manage Custom Tags</button>
+        </div>
+        
+        <hr style="border: none; border-top: 1px solid var(--border-color); margin: 20px 0;">
+
+        <!-- VIEW MODE SECTION (MOVED HERE) -->
+        <div class="section">
+            <div class="section-title">View Mode</div>
+            <p>Change how tags are displayed in the document.</p>
+             <div style="margin-top: 10px;">
+                <div class="view-mode-option">
+                    <input type="radio" name="viewMode" id="viewTagsOnly" value="tagsOnly" onchange="handleViewModeChange(this)" checked>
+                    <div><label for="viewTagsOnly" style="cursor: pointer;">Tags Only View</label><p style="margin: 0; font-size: 12px; color: #888;">Shows colored [tag] indicators.</p></div>
+                </div>
+                <div class="view-mode-option">
+                    <input type="radio" name="viewMode" id="viewAudit" value="audit" onchange="handleViewModeChange(this)">
+                    <div><label for="viewAudit" style="cursor: pointer;">Structure Audit View</label><p style="margin: 0; font-size: 12px; color: #888;">Applies full-paragraph background colors.</p></div>
+                </div>
+                <div class="view-mode-option">
+                    <input type="radio" name="viewMode" id="viewStandard" value="standard" onchange="handleViewModeChange(this)">
+                    <div><label for="viewStandard" style="cursor: pointer;">Standard View</label><p style="margin: 0; font-size: 12px; color: #888;">Clean text with no visible tags or colors.</p></div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- ======================= UTILITIES TAB (MODIFIED) ======================= -->
+    <template id="utilitiesTab-template">
+        <div class="section">
+            <div class="section-title">Utilities</div>
+            <p>Auto-discover untagged paragraphs and fix all tag numbering.</p>
+            <button class="button-secondary" style="width: 100%;" onclick="handleRenumber()">Intelligent Renumber</button>
+        </div>
+
+        <hr style="border: none; border-top: 1px solid var(--border-color); margin: 20px 0;">
+
+        <div class="section">
+            <div class="section-title">Project Goals & Progress</div>
+            <p>Set a target word count and due date for your project.</p>
+
+            <div class="goal-input-group">
+                <label for="target-word-count">Target Word Count</label>
+                <input type="number" id="target-word-count" min="0" step="100">
+            </div>
+            <div class="goal-input-group">
+                <label for="due-date">Due Date</label>
+                <input type="date" id="due-date">
+            </div>
+
+            <div class="progress-display">
+                <div class="progress-text">
+                    <span id="word-count-display">0 / 0 words</span>
+                    <span id="due-date-countdown" class="progress-subtext"></span>
+                </div>
+                <progress id="word-count-progress" value="0" max="100"></progress>
+            </div>
+
+            <hr style="border-top: 1px dashed var(--border-color); margin: 20px 0;">
+
+            <div class="section-title">Daily Writing Goal</div>
+            <div class="goal-input-group">
+                <label for="daily-target">Daily Target</label>
+                <input type="number" id="daily-target" min="0" step="50">
+            </div>
+
+            <div class="progress-display">
+                <div class="progress-text">
+                    <span id="daily-word-count-display">0 / 0 words today</span>
+                </div>
+                <progress id="daily-word-count-progress" value="0" max="100"></progress>
+            </div>
+        </div>
+
+        <hr style="border: none; border-top: 1px solid var(--border-color); margin: 20px 0;">
+
+ <!-- PROJECT MILESTONES SECTION -->
+<div class="section">
+    <div class="section-title">Active Milestones</div>
+    <p>Check off goals as you complete them. Click below to add or edit.</p>
+    
+    <ul id="milestones-list">
+        <!-- Active milestones will be displayed here as a checklist -->
+    </ul>
+
+    <button class="button-secondary" style="width: 100%; margin-top: 10px;" onclick="openMilestonesDialog()">
+        Manage Milestones
+    </button>
+</div>
+        
+        <button id="save-goals-btn" class="button-primary" style="width: 100%; margin-top: 15px;">Save Word Count Goals</button>
+        <button id="refresh-goals-btn" class="button-secondary" style="width: 100%; margin-top: 5px;">Refresh All Progress</button>
+    </template>
+
+    <script>
+      const userTabs = <?!= JSON.stringify(tabs) ?>;
+      let ALL_TAGS = [];
+      let kanbanData = [];
+      let customMilestones = [];
+
+      document.addEventListener('DOMContentLoaded', () => {
+        renderDynamicContent(userTabs);
+        handleScan();
+      });
+
+      function renderDynamicContent(tabsToRender) {
+        const tabsContainer = document.getElementById('tabs-container');
+        const contentContainer = document.getElementById('tab-content-container');
+        tabsContainer.innerHTML = '';
+        contentContainer.innerHTML = '';
+
+        if (!tabsToRender || tabsToRender.length === 0) {
+            contentContainer.innerHTML = '<p>No tabs are enabled. Please open Settings to select which tabs to display.</p>';
+            return;
+        }
+
+        tabsToRender.forEach((tab, index) => {
+          const tabButton = document.createElement('button');
+          tabButton.className = 'tab-link';
+          tabButton.textContent = tab.name;
+          tabButton.onclick = (event) => openTab(event, tab.id);
+          tabsContainer.appendChild(tabButton);
+
+          const tabContent = document.createElement('div');
+          tabContent.id = tab.id;
+          tabContent.className = 'tab-content';
+          const template = document.getElementById(`${tab.id}-template`);
+          if (template) {
+            tabContent.innerHTML = template.innerHTML;
+          }
+          contentContainer.appendChild(tabContent);
+
+          if (index === 0) {
+            tabButton.classList.add('active');
+            tabContent.classList.add('active');
+          }
+        });
+
+        const scanBtn = document.getElementById('scanBtn');
+        if (scanBtn) scanBtn.addEventListener('click', handleScan);
+        
+        document.querySelectorAll('.rebuild-btn').forEach(button => {
+            button.addEventListener('click', handleReorganize);
+        });
+        
+        initializeGoalsFeature();
+      }
+      
+      function openSettings() {
+        google.script.run.showSettingsDialog();
+      }
+
+      function reloadSidebar() {
+        const container = document.querySelector('.container');
+        if (container) {
+          container.innerHTML = '<div id="loader-container" style="display: block; padding-top: 50px;"><div class="loader"></div><p style="text-align: center; margin-top: 10px;">Reloading...</p></div>';
+        }
+        google.script.run.showSidebar();
+      }
+
+      function openTab(evt, tabName) {
+        document.querySelectorAll('.tab-content, .tab-link').forEach(el => el.classList.remove('active'));
+        document.getElementById(tabName).classList.add('active');
+        evt.currentTarget.classList.add('active');
+      }
+
+      function handleScan() {
+        setLoading(true);
+        google.script.run.withSuccessHandler(onDataReceived).withFailureHandler(onFailure).getInitialData();
+      }
+      
+      function onDataReceived({kanbanData: data, allTags}) {
+        ALL_TAGS = allTags;
+        kanbanData = data;
+        if(document.getElementById('tagger-buttons')) setupTaggerButtons();
+        if(document.getElementById('kanban-board')) setupKanbanBoard(data, allTags);
+        
+        const canRebuild = data && data.length > 0;
+        
+        document.querySelectorAll('.rebuild-btn').forEach(button => {
+            button.disabled = !canRebuild;
+        });
+        
+        setLoading(false);
+      }
+
+      function onActionComplete(result) {
+        setLoading(false);
+        if (result && result.message) {
+            console.log(result.message);
+        }
+        if (result && result.success) {
+           google.script.run.withSuccessHandler(onDataReceived).withFailureHandler(onFailure).getKanbanData();
+        }
+      }
+
+      function onViewModeActionComplete(result) {
+        setLoading(false);
+        if (result && result.message) {
+            console.log(result.message);
+        }
+      }
+      
+      function openTagManager() {
+        setLoading(true);
+        google.script.run
+            .withSuccessHandler(() => {
+                setLoading(false);
+                handleScan(); 
+            })
+            .withFailureHandler(onFailure)
+            .showTagManagerDialog();
+      }
+
+      function handleViewModeChange(radio) {
+          const selectedMode = radio.value;
+          setLoading(true);
+          switch (selectedMode) {
+              case 'standard':
+                  google.script.run.withSuccessHandler(onViewModeActionComplete).withFailureHandler(onFailure).standardView();
+                  break;
+              case 'tagsOnly':
+                  google.script.run.withSuccessHandler(onViewModeActionComplete).withFailureHandler(onFailure).tagsOnlyView();
+                  break;
+              case 'audit':
+                  google.script.run.withSuccessHandler(onViewModeActionComplete).withFailureHandler(onFailure).structureAuditView();
+                  break;
+          }
+      }
+
+      function setLoading(isLoading) {
+        const loader = document.getElementById('loader-container');
+        if (loader) loader.style.display = isLoading ? 'block' : 'none';
+        
+        document.querySelectorAll('button, input').forEach(el => {
+            el.disabled = isLoading;
+        });
+      }
+
+      function setupTaggerButtons() {
+        const container = document.getElementById('tagger-buttons');
+        if (!container) return;
+        container.innerHTML = '';
+        ALL_TAGS.forEach(tag => {
+          const btn = document.createElement('button');
+          btn.textContent = `Tag as ${tag.name.charAt(0).toUpperCase() + tag.name.slice(1)}`;
+          btn.style.backgroundColor = tag.color;
+          btn.style.color = getContrastingTextColor(tag.color);
+          btn.onclick = () => applySmartTags(tag.name);
+          container.appendChild(btn);
+        });
+      }
+      
+      function applySmartTags(category) { setLoading(true); google.script.run.withSuccessHandler(onActionComplete).withFailureHandler(onFailure).applySmartTags(category); }
+      function handleRenumber() { if (!confirm("This will renumber all tags. Continue?")) return; setLoading(true); google.script.run.withSuccessHandler(onActionComplete).withFailureHandler(onFailure).intelligentRenumberAllTags(); }
+      function openDialog() { setLoading(true); google.script.run.withSuccessHandler(() => setLoading(false)).withFailureHandler(onFailure).showOrganizerDialog(); }
+      
+      function handleReorganize() {
+        const userConfirmed = confirm("Are you sure you want to rebuild the document?\n\nThis will reorder the paragraphs based on the current arrangement in the 'Architect' tab. This action cannot be undone.");
+        if (!userConfirmed) return;
+
+        setLoading(true);
+        const kanbanState = {};
+        ALL_TAGS.forEach(tag => kanbanState[tag.name] = []);
+        kanbanState['untagged'] = [];
+        const kanbanBoard = document.getElementById('kanban-board');
+        if (kanbanBoard) {
+            kanbanBoard.querySelectorAll('.kanban-column').forEach(column => {
+              const category = column.dataset.category;
+              column.querySelectorAll('.kanban-card').forEach(card => {
+                const cardData = kanbanData.find(item => item.originalIndex == card.dataset.originalIndex);
+                if (cardData) {
+                  if (!kanbanState[category]) kanbanState[category] = [];
+                  kanbanState[category].push(cardData);
+                }
+              });
+            });
+        }
+        google.script.run.withSuccessHandler(onActionComplete).withFailureHandler(onFailure).reorganizeFromKanban(kanbanState);
+      }
+      
+      function onFailure(error) { setLoading(false); alert('An error occurred: ' + error.message); }
+
+      function setupKanbanBoard(data, allTags) {
+        const board = document.getElementById('kanban-board');
+        if (!board) return;
+        board.innerHTML = '';
+        const allTagNames = allTags.map(t => t.name);
+        const columns = {};
+        allTagNames.forEach(name => columns[name] = []);
+        columns['untagged'] = [];
+        data.forEach((item) => {
+          const category = allTagNames.includes(item.category) ? item.category : 'untagged';
+          columns[category].push(item);
+        });
+        const orderedColumnNames = [...allTagNames, 'untagged'];
+        orderedColumnNames.forEach(category => {
+          const cards = columns[category];
+          if (!cards) return;
+          const columnEl = document.createElement('div');
+          columnEl.className = 'kanban-column';
+          columnEl.dataset.category = category;
+          columnEl.innerHTML = `<div class="kanban-column-title">${category.toUpperCase()} (${cards.length})</div><ul class="kanban-cards"></ul>`;
+          const cardListEl = columnEl.querySelector('.kanban-cards');
+          cards.forEach(card => {
+            const cardEl = document.createElement('li');
+            cardEl.className = 'kanban-card';
+            cardEl.dataset.originalIndex = card.originalIndex;
+            const idDisplay = card.id ? `<strong>[${card.id}]</strong>` : '';
+            cardEl.innerHTML = `${idDisplay} ${card.displayText}`;
+            cardListEl.appendChild(cardEl);
+          });
+          board.appendChild(columnEl);
+          new Sortable(cardListEl, { group: 'kanban', animation: 150 });
+        });
+      }
+      
+      function getContrastingTextColor(hex) {
+          if (!hex) return '#000000';
+          let r = 0, g = 0, b = 0;
+          if (hex.length == 4) { r = parseInt(hex[1] + hex[1], 16); g = parseInt(hex[2] + hex[2], 16); b = parseInt(hex[3] + hex[3], 16); } 
+          else if (hex.length == 7) { r = parseInt(hex.substring(1, 3), 16); g = parseInt(hex.substring(3, 5), 16); b = parseInt(hex.substring(5, 7), 16); }
+          const luminance = (0.299 * r + 0.587 * g + 0.114 * b);
+          return luminance > 128 ? '#000000' : '#ffffff';
+      }
+
+      // --- Goal Tracker Functions ---
+      function initializeGoalsFeature() {
+        const saveBtn = document.getElementById('save-goals-btn');
+        const refreshBtn = document.getElementById('refresh-goals-btn');
+        
+        if (saveBtn) {
+          saveBtn.addEventListener('click', handleSaveGoals);
+          refreshBtn.addEventListener('click', fetchGoals);
+          fetchGoals();
+        }
+      }
+
+      function fetchGoals() {
+        setLoading(true);
+        google.script.run.withSuccessHandler(onGoalsDataReceived).withFailureHandler(onFailure).getGoalSettings();
+      }
+
+      function handleSaveGoals() {
+        setLoading(true);
+        const settings = {
+          target: parseInt(document.getElementById('target-word-count').value, 10) || 0,
+          dueDate: document.getElementById('due-date').value || '',
+          dailyTarget: parseInt(document.getElementById('daily-target').value, 10) || 0
+        };
+        google.script.run.withSuccessHandler(onGoalsDataReceived).withFailureHandler(onFailure).saveGoalSettings(settings);
+      }
+
+      function onGoalsDataReceived(data) {
+        setLoading(false);
+        if (!data || !data.success) {
+          console.error('Failed to get goal data:', data.message);
+          return;
+        }
+
+        const { settings, currentWordCount, wordsWrittenToday, customGoals } = data;
+        
+        document.getElementById('target-word-count').value = settings.target;
+        document.getElementById('due-date').value = settings.dueDate;
+        
+        const targetWords = settings.target || 0;
+        const mainPercentage = targetWords > 0 ? (currentWordCount / targetWords) * 100 : 0;
+        document.getElementById('word-count-display').textContent = `${currentWordCount.toLocaleString()} / ${targetWords.toLocaleString()} words`;
+        document.getElementById('word-count-progress').value = Math.min(100, mainPercentage);
+
+        const countdownEl = document.getElementById('due-date-countdown');
+        if (settings.dueDate) {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const dueDate = new Date(settings.dueDate + 'T00:00:00');
+          const diffTime = dueDate - today;
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+          if (diffDays < 0) {
+            countdownEl.textContent = `Overdue by ${Math.abs(diffDays)} day(s)`;
+          } else if (diffDays === 0) {
+             countdownEl.textContent = 'Due today!';
+          } else {
+             countdownEl.textContent = `${diffDays} day(s) left`;
+          }
+        } else {
+          countdownEl.textContent = '';
+        }
+
+        document.getElementById('daily-target').value = settings.dailyTarget;
+        const dailyTargetWords = settings.dailyTarget || 0;
+        const dailyPercentage = dailyTargetWords > 0 ? (wordsWrittenToday / dailyTargetWords) * 100 : 0;
+        document.getElementById('daily-word-count-display').textContent = `${wordsWrittenToday.toLocaleString()} / ${dailyTargetWords.toLocaleString()} words today`;
+        document.getElementById('daily-word-count-progress').value = Math.min(100, dailyPercentage);
+
+        customMilestones = customGoals || [];
+        renderMilestones();
+        updateGoalAlerts(data);
+      }
+
+      function updateGoalAlerts(data) {
+        const container = document.getElementById('goal-alerts-container');
+        if (!container) return;
+        container.innerHTML = '';
+        const { settings, currentWordCount } = data;
+        const alerts = [];
+
+        if (settings.dueDate) {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const dueDate = new Date(settings.dueDate + 'T00:00:00');
+          const diffTime = dueDate - today;
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+          if (diffDays < 0) {
+            alerts.push({ type: 'danger', icon: 'error_outline', message: `<strong>Past Due:</strong> Your project deadline was ${Math.abs(diffDays)} day(s) ago.` });
+          } else if (diffDays <= 7) {
+            const dueMessage = diffDays === 0 ? 'is <strong>today</strong>' : `is in <strong>${diffDays} day(s)</strong>`;
+            alerts.push({ type: 'warning', icon: 'warning_amber', message: `<strong>Deadline Approaching:</strong> Your due date ${dueMessage}.` });
+          }
+        }
+
+        const targetWords = settings.target || 0;
+        if (targetWords > 0) {
+          const progress = (currentWordCount / targetWords) * 100;
+          if (progress >= 90 && progress < 100) {
+            alerts.push({ type: 'warning', icon: 'flag', message: `<strong>Goal Nearing:</strong> You've reached ${Math.floor(progress)}% of your word count target!` });
+          }
+        }
+
+        alerts.forEach(alert => {
+          const alertEl = document.createElement('div');
+          alertEl.className = `goal-alert alert-${alert.type}`;
+          alertEl.innerHTML = `<span class="material-icons">${alert.icon}</span><div>${alert.message}</div>`;
+          container.appendChild(alertEl);
+        });
+      }
+
+
+
+      function handleAddMilestone() {
+        const textField = document.getElementById('milestone-text');
+        const dateField = document.getElementById('milestone-date');
+        const text = textField.value.trim();
+        const dueDate = dateField.value;
+
+        if (!text) {
+          alert('Please enter a goal description.');
+          return;
+        }
+
+        const newMilestone = { id: Date.now(), text: text, dueDate: dueDate, isComplete: false };
+        customMilestones.push(newMilestone);
+        textField.value = '';
+        dateField.value = '';
+        saveAndRenderMilestones();
+      }
+
+function handleMilestoneListClick(event) {
+  const target = event.target;
+  if (target.matches('.milestone-checkbox')) {
+    const milestoneId = parseInt(target.closest('.milestone-item').dataset.id, 10);
+    const milestone = customMilestones.find(m => m.id === milestoneId);
+    if (milestone) {
+      milestone.isComplete = target.checked;
+      saveAndRenderMilestones();
+    }
+  }
+}
+function renderMilestones() {
+  const list = document.getElementById('milestones-list');
+  if (!list) return;
+  list.innerHTML = '';
+  
+  const activeMilestones = customMilestones.filter(m => !m.isComplete);
+
+  if (activeMilestones.length === 0) {
+      list.innerHTML = '<p style="text-align: center; color: #999; font-size: 12px; margin: 10px 0;">No active milestones!</p>';
+      return;
+  }
+  
+  activeMilestones.forEach(milestone => {
+    const li = document.createElement('li');
+    li.className = 'milestone-item';
+    li.dataset.id = milestone.id;
+    
+    const formattedDate = milestone.dueDate 
+      ? `Due: ${new Date(milestone.dueDate + 'T00:00:00').toLocaleDateString()}` 
+      : '';
+
+    li.innerHTML = `
+      <input type="checkbox" class="milestone-checkbox">
+      <div class="milestone-details">
+        <span>${milestone.text}</span>
+        <div class="milestone-due-date">${formattedDate}</div>
+      </div>
+    `;
+    list.appendChild(li);
+  });
+}
+
+      function saveAndRenderMilestones() {
+        renderMilestones();
+        google.script.run
+          .withSuccessHandler(res => console.log(res.message))
+          .withFailureHandler(onFailure)
+          .saveCustomGoals(customMilestones);
+      }
+
+      function openMilestonesDialog() {
+  setLoading(true);
+  google.script.run.withSuccessHandler(() => setLoading(false)).showMilestonesDialog();
+}
+    </script>
+</body>
+</html>

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <base target="_top">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+      :root { --primary-color: #4a86e8; --border-color: #ddd; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 25px; }
+      h3, p { margin: 0; }
+      p { font-size: 13px; color: #666; margin-top: 4px; }
+      .section { margin-top: 25px; }
+      .section-title { font-weight: bold; margin-bottom: 10px; font-size: 14px; }
+      
+      .milestone-add-form { display: flex; gap: 5px; margin-bottom: 15px; }
+      .milestone-add-form input[type="text"] { flex-grow: 1; border: 1px solid var(--border-color); border-radius: 4px; padding: 8px; }
+      .milestone-add-form input[type="date"] { border: 1px solid var(--border-color); border-radius: 4px; padding: 6px; }
+      .milestone-add-form button { padding: 0; width: 36px; height: 36px; font-size: 24px; line-height: 36px; flex-shrink: 0; background-color: var(--primary-color); color: white; border: none; border-radius: 4px; cursor: pointer; }
+      
+      ul { list-style: none; padding: 0; margin: 0; }
+      .milestone-item { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 8px 5px; border-bottom: 1px solid #eee; }
+      .milestone-item .milestone-details { flex-grow: 1; }
+      .milestone-item .milestone-due-date { font-size: 11px; color: #888; }
+      .milestone-item.completed .milestone-details { text-decoration: line-through; color: #888; }
+      .delete-milestone-btn { background: none; border: none; color: #aaa; cursor: pointer; padding: 2px; }
+      .delete-milestone-btn .material-icons { font-size: 18px; }
+      .delete-milestone-btn:hover { color: #d93025; }
+
+      .footer { position: fixed; bottom: 0; left: 0; right: 0; padding: 15px; background-color: #f1f2f4; border-top: 1px solid var(--border-color); text-align: right; }
+      .footer button { background-color: #666; color: white; border: none; border-radius: 4px; padding: 8px 12px; font-weight: bold; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h3>Manage Project Milestones</h3>
+    <p>Add new goals or review your completed history.</p>
+
+    <div class="section">
+        <div class="section-title">Add New Milestone</div>
+        <div class="milestone-add-form">
+            <input type="text" id="milestone-text" placeholder="e.g., Complete research for introduction">
+            <input type="date" id="milestone-date">
+            <button id="add-milestone-btn">+</button>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Active Milestones</div>
+        <ul id="active-milestones-list"></ul>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Completed History</div>
+        <ul id="completed-milestones-list"></ul>
+    </div>
+
+    <div id="loader" style="text-align:center; padding: 20px; display: none;">Loading...</div>
+
+    <div class="footer">
+        <button onclick="handleClose()">Close & Refresh Dashboard</button>
+    </div>
+
+    <script>
+        let allMilestones = [];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('loader').style.display = 'block';
+            google.script.run.withSuccessHandler(onDataFetched).getGoalSettings();
+            
+            document.getElementById('add-milestone-btn').addEventListener('click', handleAdd);
+            document.getElementById('active-milestones-list').addEventListener('click', handleListClick);
+            document.getElementById('completed-milestones-list').addEventListener('click', handleListClick);
+        });
+
+        function onDataFetched(data) {
+            document.getElementById('loader').style.display = 'none';
+            if (data && data.success) {
+                allMilestones = data.customGoals || [];
+                renderLists();
+            }
+        }
+
+        function renderLists() {
+            const activeList = document.getElementById('active-milestones-list');
+            const completedList = document.getElementById('completed-milestones-list');
+            activeList.innerHTML = '';
+            completedList.innerHTML = '';
+
+            const activeGoals = allMilestones.filter(m => !m.isComplete);
+            const completedGoals = allMilestones.filter(m => m.isComplete);
+
+            if (activeGoals.length === 0) activeList.innerHTML = '<p style="color:#999;font-size:12px;">No active milestones.</p>';
+            if (completedGoals.length === 0) completedList.innerHTML = '<p style="color:#999;font-size:12px;">No completed milestones yet.</p>';
+
+            activeGoals.forEach(m => activeList.appendChild(createMilestoneElement(m)));
+            completedGoals.forEach(m => completedList.appendChild(createMilestoneElement(m)));
+        }
+
+        function createMilestoneElement(milestone) {
+            const li = document.createElement('li');
+            li.className = 'milestone-item';
+            li.dataset.id = milestone.id;
+            if (milestone.isComplete) li.classList.add('completed');
+            
+            const formattedDate = milestone.dueDate ? `Due: ${new Date(milestone.dueDate + 'T00:00:00').toLocaleDateString()}` : '';
+
+            li.innerHTML = `
+                <div class="milestone-details">
+                  <span>${milestone.text}</span>
+                  <div class="milestone-due-date">${formattedDate}</div>
+                </div>
+                <button class="delete-milestone-btn" title="Delete Milestone">
+                  <span class="material-icons">delete_outline</span>
+                </button>
+            `;
+            return li;
+        }
+
+        function handleAdd() {
+            const textField = document.getElementById('milestone-text');
+            const dateField = document.getElementById('milestone-date');
+            if (!textField.value.trim()) return;
+
+            allMilestones.push({
+                id: Date.now(),
+                text: textField.value.trim(),
+                dueDate: dateField.value,
+                isComplete: false
+            });
+            textField.value = '';
+            dateField.value = '';
+            saveAndRender();
+        }
+
+        function handleListClick(event) {
+            const deleteBtn = event.target.closest('.delete-milestone-btn');
+            if (deleteBtn) {
+                const milestoneId = parseInt(deleteBtn.closest('.milestone-item').dataset.id, 10);
+                if (confirm('Are you sure you want to permanently delete this milestone?')) {
+                    allMilestones = allMilestones.filter(m => m.id !== milestoneId);
+                    saveAndRender();
+                }
+            }
+        }
+
+        function saveAndRender() {
+            renderLists();
+            google.script.run.withFailureHandler(err => alert(err.message)).saveCustomGoals(allMilestones);
+        }
+
+        function handleClose() {
+            // This pattern ensures the sidebar reloads with the latest data
+            google.script.host.close();
+            google.script.run.showSidebar();
+        }
+    </script>
+</body>
+</html>

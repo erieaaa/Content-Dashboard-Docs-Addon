@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <base target="_top">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+      :root { --primary-color: #4a86e8; --border-color: #ddd; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 20px; }
+      ul { list-style-type: none; padding: 0; margin-top: 15px; }
+      li { display: flex; align-items: center; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; margin-bottom: 8px; background-color: white; }
+      li:hover { background-color: #f8f9fa; }
+      .drag-handle { cursor: grab; color: #aaa; margin-right: 10px; }
+      .drag-handle:active { cursor: grabbing; }
+      .tab-label { flex-grow: 1; }
+      .footer { position: fixed; bottom: 0; left: 0; right: 0; padding: 15px; background-color: #f1f2f4; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 10px; }
+      button { padding: 8px 12px; border: none; border-radius: 4px; color: white; cursor: pointer; font-weight: bold; }
+      button:disabled { background-color: #ccc !important; cursor: not-allowed; }
+      .button-primary { background-color: var(--primary-color); }
+      .button-secondary { background-color: #666; }
+    </style>
+</head>
+<body>
+    <h3>Customize Sidebar</h3>
+    <p style="font-size: 13px; color: #666; margin-top: -10px;">Check which tabs to show and drag to reorder.</p>
+
+    <ul id="tab-list">
+        <!-- List items will be generated here -->
+    </ul>
+
+    <div class="footer">
+        <button class="button-secondary" onclick="google.script.host.close()">Cancel</button>
+        <button id="save-btn" class="button-primary" onclick="saveSettings()">Save Changes</button>
+    </div>
+    
+    <script>
+        let allTabs = [];
+        let currentSettings = [];
+
+        document.addEventListener('DOMContentLoaded', () => {
+          google.script.run.withSuccessHandler(onSettingsFetched).getTabSettings();
+        });
+        
+        function onSettingsFetched(result) {
+          if (result.success) {
+            allTabs = result.allTabs;
+            currentSettings = result.settings;
+            renderList();
+          } else {
+            document.getElementById('tab-list').innerHTML = '<li>Error loading settings.</li>';
+          }
+        }
+
+        function renderList() {
+          const list = document.getElementById('tab-list');
+          list.innerHTML = '';
+
+          allTabs.forEach(tab => {
+            const isVisible = currentSettings.some(s => s.id === tab.id);
+            const li = document.createElement('li');
+            li.dataset.id = tab.id;
+            li.dataset.name = tab.name;
+            li.innerHTML = `
+              <span class="material-icons drag-handle">drag_indicator</span>
+              <label class="tab-label">
+                <input type="checkbox" ${isVisible ? 'checked' : ''}>
+                ${tab.name}
+              </label>
+            `;
+            list.appendChild(li);
+          });
+          
+          currentSettings.forEach((setting, index) => {
+              const li = list.querySelector(`li[data-id="${setting.id}"]`);
+              if (li) {
+                  list.insertBefore(li, list.children[index]);
+              }
+          });
+          
+          new Sortable(list, { handle: '.drag-handle', animation: 150 });
+        }
+
+        function saveSettings() {
+          document.getElementById('save-btn').disabled = true;
+          document.getElementById('save-btn').textContent = 'Saving...';
+          
+          const newSettings = [];
+          const listItems = document.getElementById('tab-list').querySelectorAll('li');
+
+          listItems.forEach(li => {
+            const checkbox = li.querySelector('input[type="checkbox"]');
+            if (checkbox.checked) {
+              newSettings.push({
+                id: li.dataset.id,
+                name: li.dataset.name
+              });
+            }
+          });
+          
+          google.script.run.withSuccessHandler(onSaveSuccess).saveTabSettings(newSettings);
+        }
+
+function onSaveSuccess(result) {
+  if (result.success) {
+    // First, close this dialog.
+    google.script.host.close();
+    // Then, immediately tell the server to reload the sidebar with the new settings.
+    google.script.run.showSidebar(); 
+  } else {
+    alert('Error saving settings: ' + result.message);
+    document.getElementById('save-btn').disabled = false;
+    document.getElementById('save-btn').textContent = 'Save Changes';
+  }
+}
+    </script>
+</body>
+</html>

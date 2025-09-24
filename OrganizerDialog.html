@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <base target="_top">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <style>
+      :root { --primary-color: #4a86e8; --secondary-color: #666; --bg-color: #f8f9fa; --border-color: #ddd; --kanban-bg: #e9ecef; --card-bg: #fff; }
+      html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+      .dialog-container { display: flex; flex-direction: column; height: 100%; padding: 15px; box-sizing: border-box; }
+      .dialog-header { flex-shrink: 0; }
+      .dialog-content { flex-grow: 1; overflow-y: hidden; margin-top: 15px; }
+      .dialog-footer { flex-shrink: 0; padding-top: 15px; border-top: 1px solid var(--border-color); display: flex; gap: 10px; justify-content: flex-end; }
+      button { padding: 8px 12px; border: none; border-radius: 4px; color: white; cursor: pointer; font-weight: bold; }
+      .button-primary { background-color: var(--primary-color); }
+      .button-secondary { background-color: var(--secondary-color); }
+      #kanban-board { height: 100%; display: flex; gap: 10px; overflow-x: auto; padding: 5px; background-color: var(--kanban-bg); border-radius: 5px;}
+      .kanban-column { background-color: #f1f2f4; border-radius: 5px; padding: 8px; min-width: 200px; flex-shrink: 0; display: flex; flex-direction: column; }
+      .kanban-column-title { font-weight: bold; padding: 5px; margin-bottom: 10px; font-size: 13px; flex-shrink: 0; border-top: 3px solid transparent; }
+      .kanban-cards { list-style-type: none; padding: 0; min-height: 50px; flex-grow: 1; overflow-y: auto; }
+      .kanban-card { background-color: var(--card-bg); padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; margin-bottom: 8px; cursor: grab; font-size: 12px; }
+      .kanban-card strong { color: var(--primary-color); margin-right: 5px; }
+      .loader-container { text-align: center; padding: 20px; }
+      .loader { border: 4px solid #f3f3f3; border-radius: 50%; border-top: 4px solid var(--primary-color); width: 24px; height: 24px; animation: spin 1s linear infinite; margin: 0 auto; }
+      @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="dialog-container">
+        <div class="dialog-header">
+            <h3>Content Architect Board (Fullscreen)</h3>
+            <p style="font-size: 13px; color: #666; margin-top: 0;">Drag cards to reorder. Click "Rebuild" to apply changes and close.</p>
+        </div>
+        <div class="dialog-content">
+            <div id="kanban-board"></div>
+            <div id="loader-container" style="display: none;"><div class="loader"></div></div>
+        </div>
+        <div class="dialog-footer">
+            <button class="button-secondary" onclick="google.script.host.close()">Cancel</button>
+            <button id="reorganizeBtn" class="button-primary" disabled>Rebuild Document</button>
+        </div>
+    </div>
+    <script>
+        var ALL_TAGS = [];
+        var kanbanData = [];
+
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('reorganizeBtn').addEventListener('click', handleReorganize);
+            handleScan();
+        });
+
+        function setLoading(isLoading) { document.querySelectorAll('button').forEach(function(b) { b.disabled = isLoading; }); document.getElementById('loader-container').style.display = isLoading ? 'block' : 'none'; }
+        
+        function handleScan() { setLoading(true); google.script.run.withSuccessHandler(onScanSuccess).withFailureHandler(onFailure).getKanbanData(); }
+        
+        function handleReorganize() {
+            setLoading(true);
+            var kanbanState = {};
+            document.querySelectorAll('.kanban-column').forEach(function(column) {
+                var category = column.dataset.category;
+                kanbanState[category] = [];
+                column.querySelectorAll('.kanban-card').forEach(function(card) {
+                    const cardData = kanbanData.find(item => item.originalIndex == card.dataset.originalIndex);
+                    if (cardData) {
+                      kanbanState[category].push(cardData);
+                    }
+                });
+            });
+            google.script.run.withSuccessHandler(onReorganizeSuccess).withFailureHandler(onFailure).reorganizeFromKanban(kanbanState);
+        }
+
+        function onScanSuccess({kanbanData: data, allTags}) {
+            kanbanData = data;
+            ALL_TAGS = allTags;
+            const allTagNames = allTags.map(t => t.name);
+
+            var board = document.getElementById('kanban-board');
+            board.innerHTML = '';
+
+            var columns = { 'untagged': [] };
+            allTagNames.forEach(function(name) { columns[name] = []; });
+            data.forEach(function(item) {
+                var category = allTagNames.includes(item.category) ? item.category : 'untagged';
+                columns[category].push(item);
+            });
+
+            Object.keys(columns).forEach(function(category) {
+                var cards = columns[category];
+                var tagObject = ALL_TAGS.find(function(t) { return t.name === category; });
+                var columnEl = document.createElement('div');
+                columnEl.className = 'kanban-column';
+                columnEl.dataset.category = category;
+                
+                var columnTitleStyle = tagObject ? `style="border-top-color: ${tagObject.color}"` : '';
+                columnEl.innerHTML = `<div class="kanban-column-title" ${columnTitleStyle}>${category.toUpperCase()} (${cards.length})</div><ul class="kanban-cards" id="col-dlg-${category}"></ul>`;
+
+                var cardListEl = columnEl.querySelector('.kanban-cards');
+                cards.forEach(function(card) {
+                    var cardEl = document.createElement('li');
+                    cardEl.className = 'kanban-card';
+                    cardEl.dataset.originalIndex = card.originalIndex;
+                    var idDisplay = card.id ? '<strong>[' + card.id + ']</strong>' : '';
+                    cardEl.innerHTML = idDisplay + ' ' + card.displayText;
+                    cardListEl.appendChild(cardEl);
+                });
+                board.appendChild(columnEl);
+                new Sortable(cardListEl, { group: 'kanban', animation: 150 });
+            });
+            setLoading(false);
+            document.getElementById('reorganizeBtn').disabled = data.length === 0;
+        }
+
+        function onReorganizeSuccess(result) {
+            google.script.run.showToast(result.message, !result.success);
+            if (result.success) {
+                google.script.host.close();
+            } else { setLoading(false); }
+        }
+
+        function onFailure(error) { setLoading(false); google.script.run.showToast('An error occurred: ' + error.message, true); }
+    </script>
+</body>
+</html>
